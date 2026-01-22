@@ -1,0 +1,241 @@
+-- ============================================================
+-- HelpDesk IT (MySQL / HeidiSQL) - FULL DDL (tables + keys)
+-- Engine: InnoDB | Charset: utf8mb4 | Collation: utf8mb4_unicode_ci
+-- ============================================================
+
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- (Optional) Create database (run once)
+CREATE DATABASE IF NOT EXISTS helpdesk_it
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+USE helpdesk_it;
+
+-- ============================================================
+-- 1) users (minimal Laravel-compatible)
+-- ============================================================
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  email_verified_at TIMESTAMP NULL DEFAULT NULL,
+  password VARCHAR(255) NOT NULL,
+  remember_token VARCHAR(100) NULL DEFAULT NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY users_email_unique (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 2) Spatie: roles / permissions (+ pivot tables)
+--    (default structure; works for spatie/laravel-permission)
+-- ============================================================
+DROP TABLE IF EXISTS model_has_permissions;
+DROP TABLE IF EXISTS model_has_roles;
+DROP TABLE IF EXISTS role_has_permissions;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS roles;
+
+CREATE TABLE roles (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL,
+  guard_name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY roles_name_guard_name_unique (name, guard_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE permissions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL,
+  guard_name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY permissions_name_guard_name_unique (name, guard_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE role_has_permissions (
+  permission_id BIGINT UNSIGNED NOT NULL,
+  role_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (permission_id, role_id),
+  KEY role_has_permissions_role_id_foreign (role_id),
+  CONSTRAINT role_has_permissions_permission_id_foreign
+    FOREIGN KEY (permission_id) REFERENCES permissions(id)
+    ON DELETE CASCADE,
+  CONSTRAINT role_has_permissions_role_id_foreign
+    FOREIGN KEY (role_id) REFERENCES roles(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- polymorphic: model_type + model_id (User model)
+CREATE TABLE model_has_roles (
+  role_id BIGINT UNSIGNED NOT NULL,
+  model_type VARCHAR(255) NOT NULL,
+  model_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (role_id, model_id, model_type),
+  KEY model_has_roles_model_id_model_type_index (model_id, model_type),
+  CONSTRAINT model_has_roles_role_id_foreign
+    FOREIGN KEY (role_id) REFERENCES roles(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE model_has_permissions (
+  permission_id BIGINT UNSIGNED NOT NULL,
+  model_type VARCHAR(255) NOT NULL,
+  model_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (permission_id, model_id, model_type),
+  KEY model_has_permissions_model_id_model_type_index (model_id, model_type),
+  CONSTRAINT model_has_permissions_permission_id_foreign
+    FOREIGN KEY (permission_id) REFERENCES permissions(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 3) categories
+-- ============================================================
+DROP TABLE IF EXISTS categories;
+CREATE TABLE categories (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY categories_name_unique (name),
+  KEY categories_is_active_index (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 4) tickets
+-- ============================================================
+DROP TABLE IF EXISTS tickets;
+CREATE TABLE tickets (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  subject VARCHAR(200) NOT NULL,
+  description TEXT NOT NULL,
+  category_id BIGINT UNSIGNED NOT NULL,
+  priority VARCHAR(20) NOT NULL, -- LOW/MEDIUM/HIGH/URGENT (cast to PHP Enum)
+  status VARCHAR(30) NOT NULL,   -- NEW/ASSIGNED/IN_PROGRESS/WAITING_USER/RESOLVED/CLOSED (cast to PHP Enum)
+  created_by BIGINT UNSIGNED NOT NULL,
+  assigned_to BIGINT UNSIGNED NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+
+  KEY tickets_status_index (status),
+  KEY tickets_priority_index (priority),
+  KEY tickets_category_id_index (category_id),
+  KEY tickets_created_by_index (created_by),
+  KEY tickets_assigned_to_index (assigned_to),
+  KEY tickets_created_at_index (created_at),
+  KEY tickets_status_assigned_to_index (status, assigned_to),
+  KEY tickets_status_created_by_index (status, created_by),
+
+  CONSTRAINT tickets_category_id_foreign
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+    ON DELETE RESTRICT,
+  CONSTRAINT tickets_created_by_foreign
+    FOREIGN KEY (created_by) REFERENCES users(id)
+    ON DELETE RESTRICT,
+  CONSTRAINT tickets_assigned_to_foreign
+    FOREIGN KEY (assigned_to) REFERENCES users(id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 5) comments
+-- ============================================================
+DROP TABLE IF EXISTS comments;
+CREATE TABLE comments (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ticket_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  body TEXT NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+
+  KEY comments_ticket_id_created_at_index (ticket_id, created_at),
+  KEY comments_user_id_index (user_id),
+
+  CONSTRAINT comments_ticket_id_foreign
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+    ON DELETE CASCADE,
+  CONSTRAINT comments_user_id_foreign
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 6) attachments
+--    Rule: exactly one of (ticket_id, comment_id) must be set
+--    NOTE: CHECK constraints are enforced in MySQL 8+. On older versions
+--    they may be parsed but not enforced.
+-- ============================================================
+DROP TABLE IF EXISTS attachments;
+CREATE TABLE attachments (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ticket_id BIGINT UNSIGNED NULL,
+  comment_id BIGINT UNSIGNED NULL,
+  uploaded_by BIGINT UNSIGNED NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  path VARCHAR(255) NOT NULL,
+  mime VARCHAR(120) NOT NULL,
+  size INT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (id),
+
+  KEY attachments_ticket_id_index (ticket_id),
+  KEY attachments_comment_id_index (comment_id),
+  KEY attachments_uploaded_by_index (uploaded_by),
+
+  CONSTRAINT attachments_ticket_id_foreign
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+    ON DELETE CASCADE,
+  CONSTRAINT attachments_comment_id_foreign
+    FOREIGN KEY (comment_id) REFERENCES comments(id)
+    ON DELETE CASCADE,
+  CONSTRAINT attachments_uploaded_by_foreign
+    FOREIGN KEY (uploaded_by) REFERENCES users(id)
+    ON DELETE RESTRICT,
+
+  CONSTRAINT attachments_ticket_or_comment_chk
+    CHECK (
+      (ticket_id IS NOT NULL AND comment_id IS NULL)
+      OR
+      (ticket_id IS NULL AND comment_id IS NOT NULL)
+    )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 7) audit_logs
+-- ============================================================
+DROP TABLE IF EXISTS audit_logs;
+CREATE TABLE audit_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ticket_id BIGINT UNSIGNED NOT NULL,
+  actor_id BIGINT UNSIGNED NOT NULL,
+  action VARCHAR(50) NOT NULL, -- ticket_created/ticket_assigned/status_changed/ticket_closed
+  from_value VARCHAR(50) NULL,
+  to_value VARCHAR(50) NULL,
+  metadata JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+
+  KEY audit_logs_ticket_id_created_at_index (ticket_id, created_at),
+  KEY audit_logs_actor_id_index (actor_id),
+
+  CONSTRAINT audit_logs_ticket_id_foreign
+    FOREIGN KEY (ticket_id) REFERENCES tickets(id)
+    ON DELETE CASCADE,
+  CONSTRAINT audit_logs_actor_id_foreign
+    FOREIGN KEY (actor_id) REFERENCES users(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET FOREIGN_KEY_CHECKS = 1;
