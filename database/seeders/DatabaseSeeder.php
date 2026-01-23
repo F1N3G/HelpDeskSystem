@@ -3,8 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -13,11 +13,43 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        /*
+         |------------------------------------------------------------
+         | Conturi fictive pentru testare (User / Agent / Admin)
+         |------------------------------------------------------------
+         */
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        User::firstOrCreate(
+            ['email' => 'employee@helpdeskit.test'],
+            [
+                'name' => 'Employee User',
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'agent@helpdeskit.test'],
+            [
+                'name' => 'Support Agent',
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        User::firstOrCreate(
+            ['email' => 'admin@helpdeskit.test'],
+            [
+                'name' => 'System Administrator',
+                'password' => Hash::make('password'),
+            ]
+        );
+
+        /*
+         |------------------------------------------------------------
+         | Categorii de bază (ticketing)
+         |------------------------------------------------------------
+         */
+        $this->call([
+            CategorySeeder::class,
         ]);
     }
 }

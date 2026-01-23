@@ -1,0 +1,298 @@
+HelpDeskSystem
+
+Documentație tehnică – Etapele 1–3 (până în acest moment)
+1. Context și obiectiv
+
+Scopul proiectului HelpDesk IT este dezvoltarea unui sistem web de ticketing pentru suport IT într-o organizație. Aplicația permite:
+
+raportarea problemelor IT de către angajați (User),
+
+gestionarea și rezolvarea problemelor de către tehnicieni (Agent),
+
+administrarea și coordonarea fluxului de suport (Admin).
+
+Arhitectura este server-rendered (Blade), iar logica de business este implementată exclusiv în backend, conform fluxului:
+URL → Browser → Routes → Controller → Services → Models → DB.
+
+2. Stack tehnic și mediu de dezvoltare
+2.1. Stack utilizat
+
+Laragon (Windows) pentru mediu local (Apache/Nginx + MySQL + PHP)
+
+PHP 8.3.x (confirmat via CLI)
+
+Laravel (Breeze pentru autentificare)
+
+MySQL + HeidiSQL pentru administrarea bazei de date
+
+Blade Templates pentru UI server-rendered
+
+Git + GitHub pentru versionare
+
+cmder (Laragon) pentru rulare comenzi CLI
+
+2.2. Verificare versiune PHP
+
+În terminal (cmder) s-a verificat interpretul PHP:
+
+php -v
+
+
+Rezultat: PHP 8.3.x, compatibil cu cerințele proiectului (inclusiv suport pentru enum).
+
+3. Etapa 1 – Inițializare aplicație + DB + autentificare
+3.1. Configurare .env pentru MySQL
+
+S-a configurat aplicația să folosească MySQL (nu SQLite), prin variabile .env:
+
+DB_CONNECTION=mysql
+
+DB_HOST=127.0.0.1
+
+DB_PORT=3306
+
+DB_DATABASE=helpdesk_it
+
+DB_USERNAME=root
+
+DB_PASSWORD=
+
+Această configurare permite rularea migrațiilor Laravel direct în MySQL și administrarea prin HeidiSQL.
+
+3.2. Migrații ca “single source of truth”
+
+Inițial au existat conflicte între tabele create manual și migrațiile Laravel. Pentru a asigura consistența, s-a adoptat principiul:
+
+Structura bazei de date este definită exclusiv prin migrații Laravel, nu manual în HeidiSQL.
+
+S-a rulat:
+
+php artisan migrate
+
+
+S-au creat tabelele de bază:
+
+migrations (versionare schema)
+
+users (autentificare)
+
+cache (pentru cache store în DB)
+
+jobs (pentru queue în DB)
+
+3.3. Rezolvarea erorilor de mediu (cache/sessions)
+
+În timpul optimize:clear a apărut eroare deoarece aplicația încerca să folosească CACHE_STORE=database fără tabela cache. După sincronizarea DB prin migrații, problema a fost eliminată.
+
+S-au folosit comenzi de curățare cache după modificări importante:
+
+php artisan view:clear
+php artisan optimize:clear
+
+3.4. Interfață Blade: stabilizare layout-urilor
+
+Au fost rezolvate erori specifice Blade:
+
+<?php în fișier .blade.php – a fost eliminat, deoarece directivele Blade (@extends, @section) nu se folosesc într-un fișier PHP clasic.
+
+Eroare Auth::user()->name pe paginile pentru guest – a fost rezolvată prin condiționare:
+
+folosire de @auth / @guest în navigation.blade.php
+
+3.5. Compatibilitate între layout-uri (slot vs yield)
+
+Inițial layouts/app.blade.php folosea $slot (layout de componentă). Pentru a permite @extends('layouts.app') + @section('content'), layout-ul a fost convertit la format clasic:
+
+@yield('content') în loc de {{ $slot }}
+
+Acest lucru a stabilizat UI-ul server-rendered și a eliminat erorile de randare.
+
+3.6. Rezultat final Etapa 1
+
+La finalul etapei 1:
+
+pagina Home se încarcă fără erori,
+
+autentificarea Breeze este funcțională,
+
+DB este sincronizată prin migrații,
+
+aplicația rulează stabil local.
+
+4. Etapa 2 – Versionare Git și publicare pe GitHub
+4.1. Inițializare repo Git
+
+În rădăcina proiectului:
+
+git init
+git branch -m main
+
+
+S-a verificat includerea corectă în .gitignore pentru:
+
+.env
+
+vendor/
+
+node_modules/
+
+4.2. Commit inițial
+
+Proiectul a fost adăugat și commit-uit:
+
+git add .
+git commit -m "Initial commit: Laravel setup with auth, home and dashboard"
+
+4.3. Conectare la repo GitHub și push
+
+Remote:
+
+git remote add origin https://github.com/F1N3G/HelpDeskSystem.git
+
+
+La push a apărut conflict deoarece repo-ul remote conținea deja commit-uri. S-a rezolvat prin pull --rebase, cu conflict pe README.md, apoi continuarea rebase-ului:
+
+rezolvare conflict README
+
+git rebase --continue
+
+push final pe main
+
+4.4. Rezultat final Etapa 2
+
+Codul este versionat și publicat pe GitHub.
+
+Proiectul este pregătit pentru dezvoltare incrementală pe commit-uri clare (cerință importantă academic).
+
+5. Etapa 3 – Începerea nucleului Ticketing (Enum-uri + DB)
+5.1. Configurare IDE pentru PHP 8.3 (PhpStorm)
+
+A apărut avertizarea “Enumerations are only allowed since PHP 8.1”.
+Cauza: PhpStorm folosea un interpreter PHP greșit (language level inferior).
+
+S-a setat interpreterul corect:
+
+PHP din Laragon (php.exe) cu versiunea 8.3.x
+
+S-a confirmat funcționarea enum-urilor în shell.
+
+5.2. Definirea workflow-ului prin Enum-uri
+
+Pentru a gestiona stările și prioritățile ticketelor în mod controlat (și ușor de explicat la licență), s-au introdus enum-uri PHP:
+
+TicketStatus (workflow)
+
+NEW
+
+ASSIGNED
+
+IN_PROGRESS
+
+WAITING_USER
+
+RESOLVED
+
+CLOSED
+
+Acestea reflectă State Machine Diagram și permit validarea tranzițiilor în backend.
+
+TicketPriority
+
+LOW
+
+MEDIUM
+
+HIGH
+
+5.3. Migrații DB pentru Ticketing
+
+S-au planificat/implementat migrațiile pentru:
+
+categories
+
+id
+
+name
+
+timestamps
+
+tickets
+
+id
+
+subject
+
+description
+
+status (string, mapat din enum)
+
+priority (string, mapat din enum)
+
+category_id (FK)
+
+created_by (FK către users)
+
+assigned_to (FK nullable către users)
+
+timestamps
+
+Rularea migrațiilor:
+
+php artisan migrate
+
+5.4. Rezultat final până acum (Etapa 3 – parțial)
+
+workflow-ul este definit prin enum-uri,
+
+schema DB pentru tichete este în implementare,
+
+proiectul este pregătit pentru următoarea etapă: modele + servicii + UI CRUD.
+
+6. Concluzie (până în acest moment)
+
+Până acum s-a construit o fundație robustă:
+
+mediu local stabil,
+
+DB gestionată prin migrații,
+
+UI server-rendered Blade,
+
+autentificare funcțională,
+
+versionare pe GitHub,
+
+începutul nucleului ticketing cu workflow formal (enum-uri + migrații).
+
+Aceste etape sunt esențiale pentru o implementare corectă și ușor de susținut academic.
+
+7. Următorii pași (roadmap imediat)
+
+Finalizare PASUL 3:
+
+modele Eloquent Ticket și Category
+
+relații + casts pe enum
+
+Introducere strat Service:
+
+TicketService (create/assign/change status)
+
+Controller + Routes:
+
+CRUD tickets
+
+UI Blade + Bootstrap:
+
+listare, creare, detalii
+
+Roluri (Spatie) și autorizare:
+
+Admin / Agent / User
+
+Policies / middleware
+
+Comentarii, atașamente, audit log
+
+
+
